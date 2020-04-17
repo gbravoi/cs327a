@@ -112,3 +112,6 @@ set (CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${PROJECT_SOURCE_DIR}/bin)
 set (CS327A_BINARY_DIR ${PROJECT_SOURCE_DIR}/bin)
 
 # add_subdirectory(lecture2_demo)
+add_subdirectory(hw1)
+
+

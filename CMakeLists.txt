@@ -1,7 +1,7 @@
 
 cmake_minimum_required (VERSION 2.8.12)
 project (CS327A)
-SET(CMAKE_CXX_FLAGS "-std=c++11")
+SET(CMAKE_CXX_FLAGS "-std=c++14 -I/usr/include -I/usr/local/include")
 
 # SET(CMAKE_BUILD_TYPE "Debug")
 SET(CMAKE_BUILD_TYPE "Release")
@@ -113,5 +113,5 @@ set (CS327A_BINARY_DIR ${PROJECT_SOURCE_DIR}/bin)
 
 # add_subdirectory(lecture2_demo)
 add_subdirectory(hw1)
-
+add_subdirectory(hw2)
 

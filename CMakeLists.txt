@@ -113,5 +113,6 @@ set (CS327A_BINARY_DIR ${PROJECT_SOURCE_DIR}/bin)
 
 # add_subdirectory(lecture2_demo)
 add_subdirectory(hw1)
+add_subdirectory(hw1_sol)
 add_subdirectory(hw2)
 

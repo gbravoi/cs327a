@@ -68,6 +68,9 @@ find_package(SAI2-URDF REQUIRED)
 include_directories(${SAI2-URDF_INCLUDE_DIRS})
 add_definitions(${SAI2-URDF_DEFINITIONS})
 
+# - SAI2-INTERFACES
+find_package(SAI2-INTERFACES REQUIRED)
+
 # - glfw3
 find_package(glfw3 QUIET)
 find_library(GLFW_LIBRARY glfw)
@@ -115,4 +118,5 @@ set (CS327A_BINARY_DIR ${PROJECT_SOURCE_DIR}/bin)
 add_subdirectory(hw1)
 add_subdirectory(hw1_sol)
 add_subdirectory(hw2)
+add_subdirectory(hw4)
 

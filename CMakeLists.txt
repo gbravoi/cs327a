@@ -120,4 +120,6 @@ add_subdirectory(hw1_sol)
 add_subdirectory(hw2)
 add_subdirectory(hw2_sol)
 add_subdirectory(hw4)
+add_subdirectory(hw4_sol)
+
 

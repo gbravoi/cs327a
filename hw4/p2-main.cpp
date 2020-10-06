@@ -229,30 +229,32 @@ void control(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
 	// ** Other suggested variables **
 	// bool constraint_active = false;
 	// double constraint_force;
-	// Eigen::Vector3d n_c;
-	// Eigen::MatrixXd Jc(1, robot->dof());
-	// Eigen::VectorXd tau_c(robot->dof());
+	 Eigen::Vector3d n_c;
+	Eigen::MatrixXd Jc(1, robot->dof());
+	 Eigen::VectorXd tau_c(robot->dof());
 	// Eigen::Vector3d constraint_acc_in_task;
-	// Eigen::MatrixXd Lambda_c(1,1);
-	// Eigen::MatrixXd Jcbar(robot->dof(), 1);
-	// Eigen::MatrixXd Nc(robot->dof(), robot->dof());
+	 Eigen::MatrixXd Lambda_c(1,1);
+	 Eigen::MatrixXd Jcbar(robot->dof(), 1);
+	Eigen::MatrixXd Nc(robot->dof(), robot->dof());
 
-	// Eigen::Vector3d ee_pos;
-	// Eigen::MatrixXd Jv(3, robot->dof());
-	// Eigen::MatrixXd Jvbar(robot->dof(), 3);
-	// Eigen::MatrixXd Nv(robot->dof(), robot->dof());
-	// Eigen::Matrix3d Lambda_v;
+	Eigen::Vector3d ee_pos;//end effetcor current position
+	 Eigen::MatrixXd Jv(3, robot->dof());
+	 Eigen::MatrixXd Jvbar(robot->dof(), 3);
+	 Eigen::MatrixXd Nv(robot->dof(), robot->dof());
+	 Eigen::Matrix3d Lambda_v;
 
 	// Eigen::VectorXd g(robot->dof());
 
 	// ** Suggested gains ** 
-	// const double constraint_dist_thresh = 0.095;
-	// const double eta = 0.3;
-	// const double kvc = 20;
-	// const double kpx = 20;
-	// const double kvx = 10;
-	// const double kpj = 30;
-	// const double kvj = 20;
+	 const double constraint_dist_thresh = 0.095;//0.095;
+	 const double eta = 0.3;
+	 const double kvc = 20;
+	 const double kpx = 20;
+	 const double kvx = 10;
+	 //const double kpj = 150;
+	 const double kvj = 30;//14;
+
+
 
 	while (fSimulationRunning) { //automatically set to false when simulation is quit
 		fTimerDidSleep = timer.waitForNextLoop();
@@ -273,6 +275,7 @@ void control(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
         robot->transform(T_closest_link, closest_link_name);
 		robot->J_0(Jconst_full_6, closest_link_name, retinfo._closest_point_self);
         Jv_closest_point = Jconst_full_6.topRows(3);
+		//robot->Jv(Jv_closest_point,closest_link_name,retinfo._closest_point_self);
 		closest_point = T_closest_link*retinfo._closest_point_self;
         sphere_center = coll_sphere->getLocalPos().eigen();			
 
@@ -282,7 +285,131 @@ void control(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
 		/* --------------------------------------------------------------------------------------
 			FILL ME IN: compute joint torques
 		-------------------------------------------------------------------------------------*/
-        
+        //some useful variables
+		const Eigen::MatrixXd In = Eigen::MatrixXd::Identity(robot->dof(), robot->dof()); // n x n identity matrix
+		//Robot linear jacobian in end efector
+		robot->Jv(Jv,ee_link_name, ee_pos_local);
+		//lambda ee
+		Lambda_v=(Jv * (robot->_M_inv) * Jv.transpose()).inverse();
+		//inverse jacobian robot ee
+		Jvbar=(robot->_M_inv)*Jv.transpose()*Lambda_v;
+		//nusllapce ee
+		Nv=In-Jvbar*Jv;
+		//changes in gains
+		const double kpj = 150;
+		
+
+
+		//----CONSTRAIN CONTROLLER DESIGN
+		//-----------------------------------------
+		//direction of the repulsive force
+		n_c=(sphere_center-closest_point);
+		n_c.normalize();
+		//Jacobian constrain
+		Jc=n_c.transpose()*Jv_closest_point;
+		//Lambda constrain
+		Lambda_c= (Jc * (robot->_M_inv) * Jc.transpose()).inverse();
+		//other usefult constrain related variables
+		//--Jc bar
+		Jcbar=(robot->_M_inv)*Jc.transpose()*Lambda_c;
+		
+		//boolean for constrain active
+		bool is_object_near=(closest_distance<=constraint_dist_thresh);
+
+		//Force artificial repulsion (magnitude)
+		double F_o=-1*eta*abs(1/closest_distance-1/constraint_dist_thresh)/pow(closest_distance,2);
+
+		//If object near Nullspace affected, otherwise identity
+		Eigen::MatrixXd Jtc(3, robot->dof());
+		if(is_object_near){//if constarain is active
+			Nc=In-Jcbar*Jc;
+		}else{
+			Nc=In;
+		}
+		
+		//tau constrain
+		if (is_object_near){//if constarin is active
+			tau_c=Jc.transpose()*F_o+Jc.transpose()*Lambda_c*(-1*kvx*Jc*robot->_dq);
+		}else{
+			tau_c=Eigen::VectorXd::Zero(robot->dof());
+		}
+
+
+
+		
+
+
+		//----TASK CONTROLLER DESIGN
+		//-----------------------------------------
+		auto t=curr_time;
+		//desired values position, speed, acceleration
+		//ee_pos_des already defined
+		Eigen::Vector3d ee_v_des;
+		ee_v_des<<0,0.4*2*M_PI/6*cos(2*M_PI*t/6), 0;
+		Eigen::Vector3d ee_a_des;
+		ee_a_des<<0,-0.4*4*pow(M_PI,2)/36*sin(2*M_PI*t/6), 0;
+
+		//current position and speed
+		//posiiton
+		robot->position(ee_pos, ee_link_name, ee_pos_local);
+		//speed
+		Eigen::Vector3d ee_v;
+		robot->linearVelocity(ee_v,ee_link_name, ee_pos_local);
+
+		//decoupled force_motion
+		Eigen::VectorXd F_star;
+		F_star=ee_a_des-1*kpx*(ee_pos-ee_pos_des)-1*kvx*(ee_v-ee_v_des);
+
+		//gravity
+		Eigen::VectorXd g(robot->dof());
+		robot->gravityVector(g); 
+
+
+		//Jacobian of the task that does not violate constrain
+		Jtc=Jv*Nc;
+
+		//Lambda of the task that does not violate constrain
+		Eigen::MatrixXd Lambda_tc(3, robot->dof());
+		Lambda_tc= (Jtc * (robot->_M_inv) * Jtc.transpose()).inverse();
+
+
+		//Nullspace task
+		//same as Nv
+
+		//tau task
+		Eigen::VectorXd tau_tc(robot->dof());
+		tau_tc=Jtc.transpose()*(Lambda_tc*(F_star+Jtc*robot->_M_inv*tau_c));
+
+
+
+
+
+
+		//----POSTURE CONTROLLER DESIGN
+		//-----------------------------------------
+		//desires postures
+		Eigen::VectorXd q_des(robot->dof());
+		q_des<<0, 5.9, 3.7,1.57,1.75,3.14;
+
+		//Nv=In-((robot->_M_inv)*Jtc.transpose()*Lambda_tc)*Jtc;
+
+		//tau posture
+		Eigen::VectorXd tau_ptc(robot->dof());
+		tau_ptc=Nc.transpose()*Nv.transpose()*(robot->_M*(-1*kpj*(robot->_q-q_des)-1*kvj*robot->_dq));
+
+		
+
+		//----FINAL TAU
+		//-----------------------------------------
+		tau=tau_c+tau_tc+tau_ptc+g;
+
+
+		
+
+
+		
+
+
 
 		/* --------------------------------------------------------- */
 		sim->setJointTorques(robot_name, tau);

@@ -186,7 +186,7 @@ void control(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
 	Eigen::Vector3d ee_pos; //end effector position
 	Eigen::Vector3d v; //end effector velocity
 	Eigen::VectorXd qd(robot->dof()); //desired joint positions
-	
+
 	while (fSimulationRunning) { //automatically set to false when simulation is quit
 		fTimerDidSleep = timer.waitForNextLoop();
 
@@ -202,16 +202,30 @@ void control(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
 		// -------------------------------------------
 		// -------------------------------------------
 		// FILL ME IN: set joint torques for simulation
-
+		robot-> Jv(Jv,ee_link_name,ee_pos_local);
+		// Calculates the lambda matrix
+		Lv = (Jv * (robot->_M_inv) * Jv.transpose()).inverse();
+		// Determines the end effector's position
+		robot-> position(ee_pos,ee_link_name,ee_pos_local);
+		// Determines the velocity at the end effector
+		robot-> linearVelocity(v,ee_link_name,ee_pos_local);
+		// Determines the gravity vector
+		robot-> gravityVector(g);
+		p = Lv * Jv * robot->_M_inv * g;
+		qd = robot-> _q;
+		qd(1) = -(M_PI/8) + (M_PI/8)*sin(2*M_PI*curr_time/10);
 		switch (enum_problem_part) {
 			case PART1:
-
+			//tau = Jv.transpose()*(Lv * (-kpx*(ee_pos - ee_des_pos) - kvx*v) + p) + robot->_M*(-kvj* robot->_dq);
+			tau = Jv.transpose()*(Lv * (-kpx*(ee_pos - ee_des_pos) - kvx*v) + p);
 				break;
 			case PART2:
-
+			Jpseudo = Jv.transpose()*(Jv * Jv.transpose()).inverse();
+			tau = Jv.transpose()*(Lv * (-kpx*(ee_pos - ee_des_pos) - kvx*v) + p) + (In - Jv.transpose()*Jpseudo.transpose())*(robot-> _M*(-kpj*((robot->_q) - qd)- kvj*robot-> _dq)+ g);
 				break;
 			case PART3:
-
+			Jbar = (robot-> _M_inv) * Jv.transpose() * Lv;
+			tau = Jv.transpose()*(Lv * (-kpx*(ee_pos - ee_des_pos) - kvx*v) + p) + (In - Jv.transpose()*Jbar.transpose())*(robot-> _M*(-kpj*((robot->_q) - qd)- kvj*robot-> _dq)+ g);
 				break;
 			default:
 				tau.setZero();

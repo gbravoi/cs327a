@@ -15,7 +15,7 @@
 #include <iostream>
 #include <string>
 #include <thread>
-#include <math.h>
+#include <math.h> 
 
 #include "Sai2Model.h"
 #include "Sai2Graphics.h"
@@ -150,9 +150,72 @@ void simulation(Sai2Model::Sai2Model* robot) {  //--- Simulation loop ---//
 		/* --------------------------------------------------------------------------------------
 			FILL ME IN: set new joint velocities
 		-------------------------------------------------------------------------------------*/
+		double t=curr_time; //local variable to make easy call current time
 
+		//evaluate xd
+		//position cartesian (values not used)
+		//orientation in euler parameters
+		Eigen::VectorXd lb(4); //lambdas
+		lb(0)=1/sqrt(2)*sin(M_PI/4*cos((2*M_PI*t)/5));//lambda_0d
+		lb(1)=1/sqrt(2)*cos(M_PI/4*cos((2*M_PI*t)/5));//lambda_1d
+		lb(2)=1/sqrt(2)*sin(M_PI/4*cos((2*M_PI*t)/5));//lambda_2d
+		lb(3)=1/sqrt(2)*cos(M_PI/4*cos((2*M_PI*t)/5));//lambda_1d
+
+		//evaluate operational space velocity
+		Eigen::VectorXd opspace_vel(7); // operational space velocity
+		opspace_vel(0)= 0;//dx
+		opspace_vel(1)= -0.04*M_PI*sin((2*M_PI*t)/5);//dy
+		opspace_vel(2)= 0.04*M_PI*sin((4*M_PI*t)/5);//dz
+		opspace_vel(3)= -0.05*sqrt(2)*pow(M_PI,2)*cos(M_PI/4*cos((2*M_PI*t)/5))*sin((2*M_PI*t)/5);//d lambda_0d
+		opspace_vel(4)= 0.05*sqrt(2)*pow(M_PI,2)*sin(M_PI/4*cos((2*M_PI*t)/5))*sin((2*M_PI*t)/5);//d lambda_1d
+		opspace_vel(5)= -0.05*sqrt(2)*pow(M_PI,2)*cos(M_PI/4*cos((2*M_PI*t)/5))*sin((2*M_PI*t)/5);//d lambda_2d
+		opspace_vel(6)= 0.05*sqrt(2)*pow(M_PI,2)*sin(M_PI/4*cos((2*M_PI*t)/5))*sin((2*M_PI*t)/5);//d lambda_3d
+
+
+		//define matrix E+
+		Eigen::MatrixXd Eplus(6,7);
+		//make all values 0
+		Eplus.setZero();
 		
+		//fill Ep+
+		Eplus(0,0)=1;
+		Eplus(1,1)=1;
+		Eplus(2,2)=1;
+		
+		//fillEr+
+		Eplus(3,3)=-2*lb(1);
+		Eplus(3,4)=2*lb(0);
+		Eplus(3,5)=-2*lb(3);
+		Eplus(3,6)=2*lb(2);
 
+		Eplus(4,3)=-2*lb(2);
+		Eplus(4,4)=2*lb(3);
+		Eplus(4,5)=2*lb(0);
+		Eplus(4,6)=-2*lb(1);
+
+		Eplus(5,3)=-2*lb(3);
+		Eplus(5,4)=-2*lb(2);
+		Eplus(5,5)=2*lb(1);
+		Eplus(5,6)=2*lb(0);
+
+		//linear velocity and angular velocity
+		Eigen::VectorXd vel(6);
+		vel=Eplus*opspace_vel;
+
+		//get J0 of the robot. note J0=[Jv; Jw]
+		//define pos_in_link
+		auto pos_in_link=Eigen::Vector3d::Zero();//values described in homework instructions
+		robot->J_0(J0,ee_link_name,pos_in_link); //linkname= the end efector
+
+		//Jacobian pseudo inverse
+		//define local variables for readability
+		auto _A_inv=robot->_M_inv;
+		auto _A=robot->_M;
+		auto _Lambda=(J0*_A_inv*J0.transpose()).inverse();
+		Jbar=_A_inv*J0.transpose()*_Lambda;
+
+		//save value of dq
+		robot->_dq=Jbar*vel;
 
 		
 
@@ -161,7 +224,7 @@ void simulation(Sai2Model::Sai2Model* robot) {  //--- Simulation loop ---//
 	}
 }
 
-//------------------------------------------------------------------------------
+//---------------------------------	---------------------------------------------
 GLFWwindow* glfwInitialize() { //--- Window initialization ---//
 	
     // set up error callback
